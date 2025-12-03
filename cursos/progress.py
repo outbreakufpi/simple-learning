@@ -17,6 +17,9 @@ class ProgressManager:
         """
         Marca uma aula como concluída para um usuário.
         """
+        if not user or not lesson:
+            raise ValueError("Usuário e aula são obrigatórios")
+        
         progress, created = LessonProgress.objects.get_or_create(
             user=user,
             lesson=lesson
@@ -279,6 +282,9 @@ class CertificateManager:
         """
         Gera e salva o arquivo PDF do certificado.
         """
+        if not certificate:
+            raise ValueError("Certificado é obrigatório")
+        
         try:
             pdf_content = CertificateManager.generate_certificate_pdf(certificate)
             
@@ -293,6 +299,9 @@ class CertificateManager:
         
         except ImportError as e:
             print(f"Aviso: {e}. O certificado não será salvo em PDF, mas o objeto Certificate foi criado.")
+            return certificate
+        except Exception as e:
+            print(f"Erro ao gerar PDF do certificado: {e}")
             return certificate
 
     @staticmethod

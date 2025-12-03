@@ -8,6 +8,7 @@ from django.views.decorators.http import require_http_methods
 from django.db.models import Q
 from django.urls import reverse
 from django.contrib import messages
+from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 
 from .models import Course, Lesson, Material, Enrollment, Announcement, Comment, CourseProgress, LessonProgress, Certificate
 from .progress import ProgressManager, CertificateManager
@@ -19,12 +20,23 @@ def index(request):
     Lista todos os cursos disponíveis.
     """
     template_name = 'courses/index.html'
-    courses = Course.objects.all()
+    courses = Course.objects.all().select_related().prefetch_related('enrollments')
     
     # Filtro de busca
     query = request.GET.get('q', '')
     if query:
-        courses = Course.objects.search(query)
+        courses = Course.objects.search(query).select_related().prefetch_related('enrollments')
+    
+    # Paginação
+    paginator = Paginator(courses, 12)  # 12 cursos por página
+    page = request.GET.get('page')
+    
+    try:
+        courses = paginator.page(page)
+    except PageNotAnInteger:
+        courses = paginator.page(1)
+    except EmptyPage:
+        courses = paginator.page(paginator.num_pages)
     
     context = {
         'courses': courses,
@@ -38,7 +50,10 @@ def details(request, slug):
     Exibe detalhes de um curso específico.
     """
     template_name = 'courses/details.html'
-    course = get_object_or_404(Course, slug=slug)
+    course = get_object_or_404(
+        Course.objects.prefetch_related('lessons', 'enrollments'),
+        slug=slug
+    )
     enrolled = False
     progress = None
     
@@ -65,11 +80,18 @@ def enrollment(request, slug):
     """
     course = get_object_or_404(Course, slug=slug)
     
+    # Verificar se o curso tem aulas
+    if not course.lessons.exists():
+        messages.warning(request, 'Este curso ainda não possui aulas disponíveis.')
+        return redirect('cursos:details', slug=slug)
+    
     try:
         enrollment = Enrollment.objects.get(user=request.user, course=course)
         if not enrollment.is_approved():
             enrollment.active()
             messages.success(request, 'Você foi matriculado no curso com sucesso!')
+        else:
+            messages.info(request, 'Você já está matriculado neste curso.')
     except Enrollment.DoesNotExist:
         enrollment = Enrollment.objects.create(
             user=request.user,
@@ -107,7 +129,10 @@ def announcements(request, slug):
     Lista os anúncios de um curso.
     """
     template_name = 'courses/announcements.html'
-    course = get_object_or_404(Course, slug=slug)
+    course = get_object_or_404(
+        Course.objects.prefetch_related('announcements'),
+        slug=slug
+    )
     enrolled = False
     
     if request.user.is_authenticated:
@@ -118,6 +143,17 @@ def announcements(request, slug):
             pass
     
     announcements = course.announcements.all()
+    
+    # Paginação
+    paginator = Paginator(announcements, 10)  # 10 anúncios por página
+    page = request.GET.get('page')
+    
+    try:
+        announcements = paginator.page(page)
+    except PageNotAnInteger:
+        announcements = paginator.page(1)
+    except EmptyPage:
+        announcements = paginator.page(paginator.num_pages)
     
     context = {
         'course': course,
@@ -133,7 +169,10 @@ def show_announcement(request, slug, pk):
     """
     template_name = 'courses/announcement_detail.html'
     course = get_object_or_404(Course, slug=slug)
-    announcement = get_object_or_404(Announcement, pk=pk, course=course)
+    announcement = get_object_or_404(
+        Announcement.objects.select_related('course').prefetch_related('comments__user'),
+        pk=pk, course=course
+    )
     enrolled = False
     form = CommentForm(request.POST or None)
     
@@ -170,7 +209,10 @@ def lessons(request, slug):
     Lista as aulas de um curso.
     """
     template_name = 'courses/lessons.html'
-    course = get_object_or_404(Course, slug=slug)
+    course = get_object_or_404(
+        Course.objects.prefetch_related('lessons__materials'),
+        slug=slug
+    )
     enrolled = False
     progress = None
     
@@ -202,7 +244,10 @@ def lesson(request, slug, pk):
     """
     template_name = 'courses/lesson.html'
     course = get_object_or_404(Course, slug=slug)
-    lesson = get_object_or_404(Lesson, pk=pk, course=course)
+    lesson = get_object_or_404(
+        Lesson.objects.select_related('course').prefetch_related('materials'),
+        pk=pk, course=course
+    )
     enrolled = False
     progress = None
     
@@ -415,17 +460,27 @@ def download_certificate(request, slug):
     Download do certificado em PDF.
     """
     course = get_object_or_404(Course, slug=slug)
-    certificate = get_object_or_404(Certificate, user=request.user, course=course)
+    
+    try:
+        certificate = Certificate.objects.get(user=request.user, course=course)
+    except Certificate.DoesNotExist:
+        messages.error(request, 'Você ainda não possui certificado para este curso. Complete todas as aulas primeiro.')
+        return redirect('cursos:details', slug=slug)
     
     if not certificate.certificate_file:
-        raise Http404("Certificado não disponível para download.")
+        messages.error(request, 'Certificado não disponível para download. Entre em contato com o suporte.')
+        return redirect('cursos:details', slug=slug)
     
-    return FileResponse(
-        certificate.certificate_file.open('rb'),
-        content_type='application/pdf',
-        as_attachment=True,
-        filename=f'certificado_{certificate.certificate_number}.pdf'
-    )
+    try:
+        return FileResponse(
+            certificate.certificate_file.open('rb'),
+            content_type='application/pdf',
+            as_attachment=True,
+            filename=f'certificado_{certificate.certificate_number}.pdf'
+        )
+    except Exception as e:
+        messages.error(request, 'Erro ao baixar certificado. Tente novamente.')
+        return redirect('cursos:details', slug=slug)
 
 
 @login_required
@@ -435,7 +490,9 @@ def my_certificates(request):
     """
     template_name = 'accounts/my_certificates.html'
     
-    certificates = Certificate.objects.filter(user=request.user).select_related('course')
+    certificates = Certificate.objects.filter(
+        user=request.user
+    ).select_related('course', 'course_progress')
     
     context = {
         'certificates': certificates,

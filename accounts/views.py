@@ -6,11 +6,8 @@ from django.conf import settings
 
 from .forms import RegisterForm, EditAccountForm
 
-@login_required
-def dashboard(request):
-    template_name = 'accounts/dashboard.html'
-    context = {}
-    return render(request, template_name, context)
+# Dashboard movido para cursos.views
+# Use: from cursos.views import dashboard
 
 
 
