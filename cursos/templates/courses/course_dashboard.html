@@ -1,38 +1,51 @@
-{% extends "accounts/dashboard.html" %}
-
-{% block breadcrumb %}
+{% extends "accounts/dashboard.html" %} 
+{% block breadcrumb %} 
     {{ block.super }}
-    <li>/</li>
-    <li><a href="{% url 'cursos:announcements' course.slug %}">{{ course }}</a></li>
-{% endblock %}
+     <li>/</li> <li><a href="{% url 'cursos:announcements' course.slug %}">{{ course }}</a></li> 
+    {% endblock %}
+
 
 {% block menu_options %}
 <li class="pure-menu-heading">
     {{ course }}
 </li>
+
 <li>
     <a href="{% url 'cursos:lessons' course.slug %}">
         <i class="fa fa-video-camera"></i>
         Aulas e Materiais
     </a>
 </li>
+
 <li>
     <a href="#">
         <i class="fa fa-info-circle"></i>
         Informações
     </a>
 </li>
+
 <li>
     <a href="{% url 'cursos:announcements' course.slug %}">
         <i class="fa fa-envelope"></i>
         Anúncios
     </a>
 </li>
+
 <li>
     <a href="#">
         <i class="fa fa-comments"></i>
         Fórum de Dúvidas
     </a>
 </li>
+
+{% if progress and progress.certificate %}
+<li>
+    <a href="{% url 'cursos:download_certificate' course.slug %}">
+        <i class="fa fa-file-pdf-o"></i>
+        Baixar Certificado
+    </a>
+</li>
+{% endif %}
+
 {{ block.super }}
 {% endblock %}

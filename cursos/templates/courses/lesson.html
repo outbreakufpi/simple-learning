@@ -10,46 +10,101 @@
 
 {% block dashboard_content %}
 <div class="well">
-    <h2><a href="{% url 'cursos:lesson' course.slug lesson.pk %}">{{ lesson }}</a></h2>
+    <h2>{{ lesson }}</h2>
     {{ lesson.description|linebreaks }}
-    
-    
-    <p>
-        <h4>Material da Aula</h4>
-        <table class="pure-table full">
-            <thead>
-                <tr>
-                    <th>
-                        Nome
-                    </th>
-                    <th>
-                        Ação
-                    </th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for material in lesson.materials.all %}
-                <tr class="{% cycle '' 'pure-table-odd' %}">
-                    <td>
-                        {{ material }}
-                    </td>
-                    <td>
-                        {% if material.is_embedded %}
-                        <a href="{% url 'cursos:material' course.slug material.pk %}">
-                            <i class"fa fa-video-camera"></i>
-                            Acessar
-                        </a>
-                        {% else %}
-                        <a target="_blank" href="{{ material.file.url }}">
-                            <i class"fa fa-download"></i>
-                            Baixar
-                        </a>
-                        {% endif %}
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </p>
+
+    <!-- STATUS DO PROGRESSO -->
+    <div id="lesson-status" style="margin-top: 20px;">
+        {% if lesson_progress and lesson_progress.completed %}
+            <span class="label label-success">Aula concluída em {{ lesson_progress.completed_at }}</span>
+        {% else %}
+            <span class="label label-warning">Aula ainda não concluída</span>
+        {% endif %}
+    </div>
+
+    <!-- BOTÕES PARA MARCAR PROGRESSO -->
+    <div style="margin-top: 10px;">
+        <button id="complete-lesson-btn" class="btn btn-success" data-lesson-id="{{ lesson.id }}">
+            Marcar aula como concluída
+        </button>
+
+        <button id="incomplete-lesson-btn" class="btn btn-danger" data-lesson-id="{{ lesson.id }}">
+            Marcar como não concluída
+        </button>
+    </div>
+
+    <hr>
+
+    <h4>Material da Aula</h4>
+    <table class="pure-table full">
+        <thead>
+            <tr>
+                <th>Nome</th>
+                <th>Ação</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for material in lesson.materials.all %}
+            <tr class="{% cycle '' 'pure-table-odd' %}">
+                <td>{{ material }}</td>
+                <td>
+                    {% if material.is_embedded %}
+                    <a href="{% url 'cursos:material' course.slug material.pk %}">
+                        <i class"fa fa-video-camera"></i> Acessar
+                    </a>
+                    {% else %}
+                    <a target="_blank" href="{{ material.file.url }}">
+                        <i class"fa fa-download"></i> Baixar
+                    </a>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
 </div>
+
+<!-- JAVASCRIPT DE PROGRESSO -->
+<script>
+document.getElementById("complete-lesson-btn").onclick = function () {
+    const lessonId = this.dataset.lessonId;
+
+    fetch(`/cursos/{{ course.slug }}/aulas/${lessonId}/completar/`, {
+        method: "POST",
+        headers: {
+            "X-CSRFToken": "{{ csrf_token }}",
+        }
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            document.getElementById("lesson-status").innerHTML =
+                `<span class="label label-success">Aula concluída!</span>`;
+
+            if (data.certificate && data.certificate.generated) {
+                alert("🎉 Parabéns! Seu certificado já está disponível no Dashboard.");
+            }
+        }
+    });
+};
+
+document.getElementById("incomplete-lesson-btn").onclick = function () {
+    const lessonId = this.dataset.lessonId;
+
+    fetch(`/cursos/{{ course.slug }}/aulas/${lessonId}/descompletar/`, {
+        method: "POST",
+        headers: {
+            "X-CSRFToken": "{{ csrf_token }}",
+        }
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            document.getElementById("lesson-status").innerHTML =
+                `<span class="label label-warning">Aula ainda não concluída</span>`;
+        }
+    });
+};
+</script>
+
 {% endblock %}
